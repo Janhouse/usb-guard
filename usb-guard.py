@@ -66,7 +66,7 @@ class UsbGuard:
         # pack the table into the scrolled window
         self.container = self.builder.get_object("dev_container")#.add_with_viewport(table)
 
-        self.container_box = Gtk.Box(spacing=5, orientation=Gtk.Orientation.VERTICAL)
+        self.container_box = Gtk.Box(spacing=10, orientation=Gtk.Orientation.VERTICAL)
 
         self.container.add_with_viewport(self.container_box)
         self.container_box.show()
@@ -232,38 +232,37 @@ class UsbGuard:
 
             if devtree[dev]['hub'] == False:
                 
-                box = Gtk.Box(spacing=5, orientation=Gtk.Orientation.HORIZONTAL)
-                self.container_box.pack_start(box, False, False, 0)
+                box_vert = Gtk.Box(spacing=5, orientation=Gtk.Orientation.VERTICAL)
+                self.container_box.pack_start(box_vert, False, False, 0)
+                box_vert.show()
                 
-                box.set_margin_left(( 25*(lev-1) )+25)
+                box = Gtk.Box(spacing=5, orientation=Gtk.Orientation.HORIZONTAL)
+                box_vert.pack_start(box, False, False, 0)
+                
+                box2 = Gtk.Box(spacing=5, orientation=Gtk.Orientation.HORIZONTAL)
+                box_vert.pack_start(box2, False, False, 0)
+                
+                
+                box_vert.set_margin_left(( 25*(lev-1) )+25)
                 
                 box.show()
+                box2.show()
                 
                 
                 label = Gtk.Label()
                 label.set_markup(label_text.decode('string-escape'))
-                #label.set_justify(Gtk.Justification.LEFT)
-                #button.add(label)
-                
-                
-                #button = Gtk.CheckButton()
-                #button.set_halign(Gtk.Align.START)
-                #button.set_margin_left(25*(lev-1))
-                #button.halign(Gtk.GTK_ALIGN_START)
+
                 box.pack_start(label, False, False, 0)
                 label.show()
                 
                 
                 button = Gtk.Button("Enable device")
-                box.pack_start(button, False, False, 0)
+                box2.pack_start(button, False, False, 0)
                 
                 button.show()
                 
                 always = Gtk.CheckButton("Enable always")
-                #button.set_halign(Gtk.Align.START)
-                #always.set_margin_left(25*(lev-1))
-                #button.halign(Gtk.GTK_ALIGN_START)
-                box.pack_start(always, False, False, 0)
+                box2.pack_start(always, False, False, 0)
                 always.show()
 
             else:
