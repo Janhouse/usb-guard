@@ -27,13 +27,15 @@ class UsbGuard:
         # USB device relation store
         self.devtree={}
         
+        self.notifications={}
+        
         ### Main loop
         self.mainloop = GLib.MainLoop ()
         
         ### Systray stuff
         self.statusicon = Gtk.StatusIcon()
         self.statusicon.set_from_icon_name("security-medium")
-        self.statusicon.set_tooltip_text("HELLO")
+        self.statusicon.set_tooltip_text("USB Guard")
         #self.statusicon.connect("popup-menu", self.OnShowPopupMenu)
         
         ### Polkit
@@ -136,11 +138,21 @@ class UsbGuard:
         return False
 
 
-    def action_whitelist(self):
+    def action_whitelist(self, notifyObj, two, three):
+
         print "Device added to whitelist."
 
-    def action_once(self):
+
+
+        notifyObj.close()
+
+    def action_once(self, notifyObj, two, three):
+
         print "Enabling device once."
+
+
+
+        notifyObj.close()
 
     def device_vendor_string(self, device):
 
@@ -165,24 +177,56 @@ class UsbGuard:
         else:
             return device.get_property("ID_MODEL")
 
+    def on_change(self, device):
+        
+        if not device.get_property("DEVNUM"):
+            return False
+
+
+        devname = get_dev_path(device)
+        
+        if device_is_hub(device):
+            # check if authorized_default has changed
+            
+            print "Checking authorized_default state"
+
+        # check if device authorized state has changed
+        print "Checking device state"
+        
+
+    def on_remove(self, device):
+        
+        if not device.get_property("DEVNUM"):
+            return False
+
+        devname = get_dev_path(device)
+
+        if devname in self.notifications:
+            del self.notifications[devname]
             
     def on_add(self, device):
         
-        text=device_vendor_string(device)+"\n"+device_model_string(device)
+        if not device.get_property("DEVNUM"):
+            return False
 
-        Notify.init('My Application Name')
-        notification = Notify.Notification.new(
-            'New USB device connected',
-            text,
-            'dialog-information'
-        )
-        
-        notification.add_action('whitelist', 'Whitelist ', action_whitelist, None, None)
-        notification.add_action('once', 'Allow once ', action_once, None, None)
-        
-        notification.show()
-        
+        devname = get_dev_path(device)
 
+        if devname not in self.notifications:
+            text="%s\n%s" % ( self.device_vendor_string(device), self.device_model_string(device) )
+            Notify.init('My Application Name')
+            self.notifications[devname]=(device)
+            self.notifications[devname] = Notify.Notification.new(
+                'New USB device connected',
+                text,
+                'security-medium'
+            )
+        
+        self.notifications[devname].add_action('whitelist', 'Whitelist ', self.action_whitelist, None, None)
+        self.notifications[devname].add_action('once', 'Allow once ', self.action_once, None, None)
+        
+        self.notifications[devname].show()
+        
+        """
         print "subsystem", device.get_subsystem()
         print "devtype", device.get_devtype()
         print "name", device.get_name()
@@ -198,15 +242,17 @@ class UsbGuard:
         print "device keys:", ", ".join(device.get_property_keys())
         for device_key in device.get_property_keys():
             print "   device property %s: %s"  % (device_key, device.get_property(device_key))
-
+        """
 
     def on_uevent (self, client, action, device):
         print ("action " + action + " on device " + device.get_sysfs_path())
         #if device.get_subsystem() == "usb":
         if action == "add":
             self.on_add(device)
-            #if action == "remove":
-
+        if action == "remove":
+            self.on_remove(device)
+        if action == "change":
+            self.on_change(device)
 
     def rec_print(self, devtree, dev, lev):
         if lev > 0:
@@ -220,7 +266,7 @@ class UsbGuard:
             color=color_to_string(self.style.lookup_color('info_fg_color')[1])
             #color="gray"
             
-            label_text = "<span foreground='%s'><i>%s</i></span>, %s" % ( #\nPath: %s
+            label_text = "<span foreground='%s'><i>%s</i></span>, <b>%s</b>" % ( #\nPath: %s
                 color,
                 self.device_vendor_string(device), 
                 self.device_model_string(device), 
@@ -273,6 +319,8 @@ class UsbGuard:
                 #button.halign(Gtk.GTK_ALIGN_START)
                 self.container_box.pack_start(button, False, False, 0)
                 button.show()
+                #disable
+                #button.set_sensitive(False)
                 
                 label = Gtk.Label()
                 label.set_markup(label_text.decode('string-escape'))
@@ -341,6 +389,25 @@ class UsbGuard:
             self.rec_print(self.devtree, dev, 0)
 
         #print self.devtree
+
+def get_dev_path(device):
+
+    devdriver = device.get_driver()
+    devpath = device.get_sysfs_path()
+
+    if devdriver != "hub":
+        return devpath.rsplit('/', 1)[1].rsplit(':', 1)[0] + '/'
+    if devdriver == "hub":
+        return devpath.rsplit('/', 2)[1] + '/'
+
+    return False
+
+def device_is_hub(device):
+    
+    if device.get_driver() == "hub":
+        return True
+    else:
+        return False
 
 def color_to_string(gdkcolor):
     color = gdkcolor.to_string()
