@@ -4,7 +4,7 @@
 #
 
 import gi
-# make sure you use gtk+-2.0
+# make sure you use gtk+ 3
 gi.require_version('Gtk', '3.0')
 import sys, os
 import struct
@@ -113,6 +113,15 @@ class UsbGuard:
       loop.quit()
       return False
 
+    def device_enabled(self, path):
+        f = open(path+'authorized', 'r')
+        enabled=f.read().rstrip()
+        f.close
+        #print enabled
+        if enabled == '1':
+            return True
+        elif enabled == '0':
+            return False
 
     def check_authorization_cb(self, authority, res, loop):
         try:
@@ -154,6 +163,45 @@ class UsbGuard:
 
         notifyObj.close()
 
+    def action_toggle(self, button, something, dev):
+        
+        if not dev in self.devtree:
+            print "Device "+dev+" not found in device list"
+            return False
+        try:
+            if self.devtree[dev]['enabled'] == True:
+                self.action_disable(dev)
+                button.set_label("Enable device")
+            else:
+                self.action_enable(dev)
+                button.set_label("Disable device")
+                
+        except RuntimeError:
+            button.set_label("Error...")
+            raise
+        #else:
+            #button.set_label("Error...")
+        
+        
+        #print "Clicked button"
+
+
+
+    def action_enable(self, dev):
+        
+        self.action_set(self.devtree[dev]['path']+'authorized', '1')
+        self.devtree[dev]['enabled'] = True
+        
+    def action_disable(self, dev):
+        
+        self.action_set(self.devtree[dev]['path']+'authorized', '0')
+        self.devtree[dev]['enabled'] = False
+        
+    def action_set(self, path, value):
+        f = open(path, 'w')
+        enabled=f.write(value)
+        f.close
+
     def device_vendor_string(self, device):
 
         if device.get_property("ID_VENDOR_FROM_DATABASE"):
@@ -181,7 +229,6 @@ class UsbGuard:
         
         if not device.get_property("DEVNUM"):
             return False
-
 
         devname = get_dev_path(device)
         
@@ -244,6 +291,7 @@ class UsbGuard:
             print "   device property %s: %s"  % (device_key, device.get_property(device_key))
         """
 
+    # Dbus event handler
     def on_uevent (self, client, action, device):
         print ("action " + action + " on device " + device.get_sysfs_path())
         #if device.get_subsystem() == "usb":
@@ -255,11 +303,12 @@ class UsbGuard:
             self.on_change(device)
 
     def rec_print(self, devtree, dev, lev):
+
         if lev > 0:
             
-            #print "Level: "+str(lev)+"; Device: "+dev
-            #print devtree[dev]
-            #print "\n\n\n"
+            print "Level: "+str(lev)+"; Device: "+dev
+            print devtree[dev]
+            print "\n\n\n"
             device=devtree[dev]['device']
             
             
@@ -270,8 +319,12 @@ class UsbGuard:
                 color,
                 self.device_vendor_string(device), 
                 self.device_model_string(device), 
-                #device.get_sysfs_path().rsplit('/', 1)[0] + '/'
+                #device.get_sysfs_path()#.rsplit('/', 1)[0] + '/' 
                 )
+            print label_text+devtree[dev]['path']
+            #print device.get_sysfs_path().rsplit('/', 1)[0] + '/' 
+            #print get_dev_path(device)
+            #print dev
             #label=device_vendor_string(device)+", "+device_model_string(device)
             #label="wololo"
             label_text=label_text.replace('\x20', ' ')
@@ -297,17 +350,28 @@ class UsbGuard:
                 
                 label = Gtk.Label()
                 label.set_markup(label_text.decode('string-escape'))
+                
+                always = Gtk.CheckButton("Enable always")
 
+                button = Gtk.Button("")
+                button.connect("button-release-event", self.action_toggle, dev)
+                
+                if devtree[dev]['enabled'] == True:
+                    button.set_label("Disable device")
+                    label.set_sensitive(True)
+                    always.set_sensitive(True)
+                else:
+                    button.set_label("Enable device")
+                    label.set_sensitive(False)
+                    always.set_sensitive(False)
+                
                 box.pack_start(label, False, False, 0)
                 label.show()
                 
-                
-                button = Gtk.Button("Enable device")
                 box2.pack_start(button, False, False, 0)
-                
                 button.show()
                 
-                always = Gtk.CheckButton("Enable always")
+                
                 box2.pack_start(always, False, False, 0)
                 always.show()
 
@@ -361,11 +425,14 @@ class UsbGuard:
                     self.devtree[dev]={'name': dev, 'has_par': True,'children':[], 'hub':True}
 
         for device in self.devices:
+            
+            
             if device.get_driver() != "hub":
                 continue
             
             dev = device.get_sysfs_path().rsplit('/', 2)[1] + '/'
             self.devtree[dev]['device']=device
+            #self.devtree[dev]['ok']=True
 
         for device in self.devices:
             if device.get_driver() == "hub":
@@ -381,14 +448,30 @@ class UsbGuard:
 
                 if dev not in self.devtree[par]['children']:
                     self.devtree[par]['children'].append(dev)
-            
+
+                #self.devtree[dev]['ok']=True
 
         for dev in self.devtree:
+            if 'device' in self.devtree[dev]:
+                #print self.devtree[dev]['device']
+                if self.devtree[dev]['hub'] == True:
+                    self.devtree[dev]['path']=self.devtree[dev]['device'].get_sysfs_path().rsplit('/', 1)[0] + '/'
+                else:
+                    self.devtree[dev]['path']=self.devtree[dev]['device'].get_sysfs_path().rsplit('/', 0)[0] + '/'
+                print self.devtree[dev]['path']
+                self.devtree[dev]['enabled']=self.device_enabled(self.devtree[dev]['path'])
+
+                #print "good";
+
+        #print self.devtree
+
+        for dev in self.devtree:
+
             if self.devtree[dev]['has_par'] == True:
                 continue
             self.rec_print(self.devtree, dev, 0)
+                
 
-        #print self.devtree
 
 def get_dev_path(device):
 
